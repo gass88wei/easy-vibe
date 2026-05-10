@@ -1,0 +1,87 @@
+name: Build and Release Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-vitepress:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vitepress-dist
+          path: docs/.vitepress/dist
+
+  build-windows:
+    needs: build-vitepress
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: vitepress-dist
+          path: desktop/dist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install and pack
+        working-directory: desktop
+        run: |
+          npm install
+          npx electron-builder --win --publish=never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easy-vibe-windows
+          path: desktop/release/*.exe
+
+  build-macos:
+    needs: build-vitepress
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: vitepress-dist
+          path: desktop/dist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install and pack
+        working-directory: desktop
+        run: |
+          npm install
+          npx electron-builder --mac --publish=never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easy-vibe-macos
+          path: desktop/release/*.dmg
+
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: easy-vibe-windows
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: easy-vibe-macos
+          path: release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
